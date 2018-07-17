@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ResourceBundleMessageSource;
 
 /**
- * Launches, configures and collects data from Cdtt Test native application.
+ * Launches, configures and collects data from Canadian Digit Triplet Test native application.
  */
 public class CdttTestInstrumentRunner implements InstrumentRunner {
 
@@ -57,15 +57,6 @@ public class CdttTestInstrumentRunner implements InstrumentRunner {
   private Locale locale;
 
   private ResourceBundleMessageSource resourceBundleMessageSource = new ResourceBundleMessageSource();
-
-  /** Map 'end code' to test. If the 'end code' exists in the test results file we know the test completed. */
-  private Map<Integer, CdttTests> endDataCodeMap;
-
-  private static String RESOURCE_BUNDLE_BASE_NAME = "ct-instrument";
-
-  private static String NODDLE_CONFIG_FILENAME = "Config.txt";
-
-  private static String CLINIC_NAME = "ONYX";
 
   private String resultFilenamePrefix;
 
