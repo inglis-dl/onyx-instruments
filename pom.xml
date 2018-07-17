@@ -28,6 +28,7 @@
     <module>interface-weight-ricelake-140-10</module>
     <module>interface-audiogram-tremetrics-ra300</module>
     <module>interface-retinal-topcon-imagenetr4lite</module>
+    <module>interface-speechrecognitionthreshold-cdtt</module>
     <module>interface-ultrasound-ge-vivid</module>
     <module>interface-tonometer-reichert-ora</module>
     <module>jtds-ntlmauth</module>
@@ -43,6 +44,7 @@
     <onyx.version>1.11.0</onyx.version>
     <slf4j.version>1.7.12</slf4j.version>
     <spring.version>4.2.1.RELEASE</spring.version>
+    <poi.version>3.9</poi.version>
 
     <!-- maven plugins -->
     <maven-buildnumber-plugin.version>1.2</maven-buildnumber-plugin.version>
@@ -98,6 +100,11 @@
         <artifactId>slf4j-jdk14</artifactId>
         <version>${slf4j.version}</version>
         <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>${poi.version}</version>
       </dependency>
 
       <!-- Unit test libraries -->
