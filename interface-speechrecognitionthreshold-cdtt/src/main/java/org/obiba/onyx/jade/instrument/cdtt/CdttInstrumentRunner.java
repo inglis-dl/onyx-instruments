@@ -1,5 +1,10 @@
 package org.obiba.onyx.jade.instrument.cdtt;
 
+import org.obiba.onyx.jade.instrument.cdtt.CellHelper;
+import org.obiba.onyx.jade.instrument.cdtt.CellHelper.Action;
+import org.obiba.onyx.jade.instrument.cdtt.CellHelper;
+import org.obiba.onyx.jade.instrument.cdtt.WorkbookSheet;
+
 import java.awt.EventQueue;
 import java.io.BufferedReader;
 import java.io.File;
@@ -37,11 +42,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.ResourceBundleMessageSource;
 
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
 /**
  * Launches, configures and collects data from Canadian Digit Triplet Test native application.
  */
@@ -63,7 +63,7 @@ public class CdttTestInstrumentRunner implements InstrumentRunner {
 
   private Locale locale;
 
-  private static String RESOURCE_BUNDLE_BASE_NAME = "speechrecognitionthreshold-instrument";
+  private static String RESOURCE_BUNDLE_BASE_NAME = "srt-instrument";
 
   private ResourceBundleMessageSource resourceBundleMessageSource = new ResourceBundleMessageSource();
 
@@ -82,47 +82,45 @@ public class CdttTestInstrumentRunner implements InstrumentRunner {
   }
 
   public void initializeSettingsFile() {
-    this.gender = instrumentExecutionService.getInputParameterValue("INPUT_PARTICIPANT_GENDER").getValue().equals("M") ? "Male" : "Female";
-    this.barcode = instrumentExecutionService.getInputParameterValue("INPUT_PARTICIPANT_BARCODE").getValue();
-    this.language = instrumentExecutionService.getInputParameterValue("INPUT_PARTICIPANT_LANGUAGE").getValue().equals("ENGLISH") ? "EN_CA" : "FR_CA";
-    this.testear = instrumentExecutionService.getInputParameterValue("INPUT_CDTT_TEST_EAR").getValue();
+    this.gender = instrumentExecutionService.getInputParameterValue(
+      "INPUT_PARTICIPANT_GENDER").getValue().equals("M") ? "Male" : "Female";
+    this.barcode = instrumentExecutionService.getInputParameterValue(
+      "INPUT_PARTICIPANT_BARCODE").getValue();
+    this.language = instrumentExecutionService.getInputParameterValue(
+      "INPUT_PARTICIPANT_LANGUAGE").getValue().equals("ENGLISH") ? "EN_CA" : "FR_CA";
+    this.testear = instrumentExecutionService.getInputParameterValue(
+      "INPUT_CDTT_TEST_EAR").getValue();
 
-    HashMap<String,String> map = new HashMap<String,String>();
-    map.put("Default test language",this.language);
-    map.put("Default talker",this.gender);
-    map.put("Default test ear: Left (0), right (1), or binaural (2)",this.testear);
-    Set<Map.Entry<String,String>> set = map.entrySet();
+    HashMap<String,CellHelper> map = new HashMap<String,CellHelper>();
+    map.put( "Default test language",
+      new CellHelper(1,this.language,Action.WRITE));
+    map.put( "Default talker",
+      new CellHelper(1,this.gender,Action.WRITE));
+    map.put( "Default test ear: Left (0), right (1), or binaural (2)",
+      new CellHelper(1,this.testear,Action.WRITE));
 
-    File file = getSettingPath() + "/Settings.xlsx";
-    FileInputStream instream = new FileInputStream(file);
-    XSSFWorkbook workbook = new XSSFWorkbook(instream);
-    XSSFSheet sheet = workbook.getSheet("DefaultParameters");
-
-    for(Map.Entry<String,String> entry : set) {
-      String key = entry.getKey();
-      boolean found = false;
-      Iterator<Row> rowIterator = sheet.iterator();
-      while (rowIterator.hasNext() && !found) {
-        Row row = rowIterator.next();
-        Cell cell = row.getCell(0);
-        if(cell.getStringCellValue().equals(key)) {
-          cell = row.getCell(1);
-          cell.setValue(entry.getValue());
-          found = true;
-        }
-      }
-    }
+    String fileName = getSettingPath() + "/Settings.xlsx";
+    WorkbookSheet settings = new WorkbookSheet(fileName,"DefaultParameters");
 
     try {
-      FileOutputStream outstream = new FileOutputStream(file);
-      workbook.write(outstream);
+      settings.writeSheet(map);
+    } catch (...) {  //TODO catch the exception and throw ?
     }
-    workbook.close();
   }
 
   public void run() {
+    log.info("Launching CDTT application");
     externalAppHelper.launch();
-    getDataFile();
+
+    log.info("Retrieving measurements");
+    Map<String, Data> data = retrieveDeviceData();
+
+    log.info("Sending data to server");
+    sendDataToServer(data);
+  }
+
+  public void sendDataToServer(Map<String, Data> data) {
+    instrumentExecutionService.addOutputParameterValues(data);
   }
 
   /**
@@ -136,21 +134,53 @@ public class CdttTestInstrumentRunner implements InstrumentRunner {
 
   /**
    * Gets the data in the result file, compares the test codes obtained to the configuration file and show a warning
-   * popup when no test key is found or when codes are missing in result file
+   * popup when no test data is found or when the identifier does not match the barcode
    */
-  public void getDataFile() {
-    File file = getResutPath() + "/Results-" + this.barcode + ".xlsx";
+  public Map<String, Data>  retrieveDeviceData() {
 
-    if(!(file.exists() && file.isFile())) {
+    Map<String, Data> outputData = new HashMap<String, Data>();
+
+    String fileName = getResutPath() + "/Results-" + this.barcode + ".xlsx";
+
+    WorkbookSheet settings = new WorkbookSheet(fileName,"Main");
+
+    if(!sheet.canRead()) {
       warningPopup("noResultFileFound");
       log.warn("CDTT has been shutdown but the result file was not found. Perhaps CDTT was shutdown before the test was started.");
     } else {
 
-      HashSet<String> results = extractTestsFromResultFile(file);
+      // map of keys and cell offset directions:
+      // 1 = east of current cell (ie., beside current cell in same row)
+      // 2 = south of current cell (ie., below current cell in same column)
+      //
+      HashMap<String,CellHelper> map = new HashMap<String,CellHelper>();
+      map.put("Subject ID:",
+        new CellHelper(1,this.barcode,Action.VALIDATE));
+      map.put("Date & time",
+        new CellHelper(2,"RES_TEST_DATETIME",Action.READ));
+      map.put("Language",
+        new CellHelper(2,"RES_TEST_LANGUAGE",Action.READ));
+      map.put("Talker",
+        new CellHelper(2,"RES_TEST_TALKER",Action.READ));
+      map.put("Test Ear",
+        new CellHelper(2,"RES_TEST_EAR",Action.READ));
+      map.put("SRT",
+        new CellHelper(2,"RES_SRT",Action.READ));
+      map.put("St. Dev.",
+        new CellHelper(2,"RES_STD_DEV",Action.READ));
+      map.put("Reversals",
+        new CellHelper(2,"RES_REV_NB",Action.READ));
+
+      try {
+        settings.readSheet(map);
+      } catch (...) {  //TODO catch the exception and throw ?
+      }
+
+
 
       if(results.isEmpty()) {
-        warningPopup("noTestKey");
-        log.warn("No test data was found in the Cdtt test result file. Perhaps Cdtt was shutdown before the first test completed.");
+        warningPopup("noTestData");
+        log.warn("No test data was found in the CDTT test result file. Perhaps CDTT was shutdown before the test completed.");
       } else {
 
         EventQueue.invokeLater(new Runnable() {
@@ -161,14 +191,12 @@ public class CdttTestInstrumentRunner implements InstrumentRunner {
           }
         });
 
-        Data binaryData = DataBuilder.buildBinary(file);
+        Data binaryData = DataBuilder.buildBinary(new File(fileName));
         sendDataToServer(binaryData);
-
-        Set<CdttTests> completedTests = getTestsCompleted(resultTests);
-
-        if(missingTests.isEmpty() == false) warningPopup("missingTestKey", new String[] { formatToString(missingTestNames) });
       }
     }
+
+    return outputData;
   }
 
   public void sendDataToServer(Data binaryData) {
@@ -190,7 +218,7 @@ public class CdttTestInstrumentRunner implements InstrumentRunner {
    * @param callback
    * @return
    */
-  HashSet<String> extractTestsFromResultFile(File resultFile) {
+  private Map<String, Data> extractDataFromResultFile(File resultFile) {
     HashSet<String> testCodes = new HashSet<String>();
     InputStream resultFileStrm = null;
     UnicodeReader resultReader = null;
