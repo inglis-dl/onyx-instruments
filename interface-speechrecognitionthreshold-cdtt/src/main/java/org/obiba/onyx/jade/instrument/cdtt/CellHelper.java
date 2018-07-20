@@ -1,7 +1,5 @@
 package org.obiba.onyx.jade.instrument.cdtt;
 
-import org.obiba.onyx.util.data.Data;
-
 public class CellHelper {
 
   public enum Action {
@@ -10,23 +8,23 @@ public class CellHelper {
     READ
   }
 
-  public CellHelper(Integer direction, Data data, Action type) {
+  public CellHelper(Integer direction, String data, Action type) {
     this.direction = direction;
     this.data = data;
     this.type = type;
   }
 
-  public void setData(Data data) { this.data = data; }
+  public void setData(String data) { this.data = data; }
   public void setDirection(Integer direction) { this.direction = direction; }
   public void setType(Action type) { this.type = type; }
 
-  public Data getData() { return this.data; }
+  public String getData() { return this.data; }
   public Integer getDirection() { return this.direction; }
   public Action getType() { return this.type; }
 
   public Integer getDx() {
     Integer dx = 0;
-    switch this.direction {
+    switch (this.direction) {
       case 1: dx = 1; break;
       case 2: dx = 0; break;
       case 3: dx = -1; break;
@@ -38,7 +36,7 @@ public class CellHelper {
 
   public Integer getDy() {
     Integer dy = 0;
-    switch this.direction {
+    switch (this.direction) {
       case 1: dy = 0; break;
       case 2: dy = 1; break;
       case 3: dy = 0; break;
