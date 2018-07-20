@@ -23,7 +23,6 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.obiba.onyx.jade.instrument.ExternalAppLauncherHelper;
-import org.obiba.onyx.jade.instrument.cdtt.CdttInstrumentRunner.LineCallback;
 import org.obiba.onyx.jade.instrument.service.InstrumentExecutionService;
 import org.obiba.onyx.util.FileUtil;
 import org.obiba.onyx.util.data.Data;
@@ -41,7 +40,7 @@ public class CdttInstrumentRunnerTest {
 
   private InstrumentExecutionService instrumentExecutionServiceMock;
 
-  private static String RESULT_FILENAME = "Cdtt_ONYX_result.csv";
+  private static String RESULT_FILENAME = "Results-12345678.xlsx";
 
   private String errorKey = null;
 
