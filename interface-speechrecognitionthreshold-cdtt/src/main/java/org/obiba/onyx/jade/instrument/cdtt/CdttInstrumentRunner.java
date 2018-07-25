@@ -4,34 +4,18 @@ import org.obiba.onyx.jade.instrument.cdtt.CellHelper;
 import org.obiba.onyx.jade.instrument.cdtt.CellHelper.Action;
 import org.obiba.onyx.jade.instrument.cdtt.WorkbookSheet;
 
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
 import java.awt.EventQueue;
-import java.io.BufferedReader;
+
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.FilenameFilter;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.RandomAccessFile;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.channels.OverlappingFileLockException;
-import java.sql.Date;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
+
+import java.text.ParseException;
+
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.Iterator;
+import java.util.ResourceBundle;
 
 import javax.swing.JOptionPane;
 
@@ -40,17 +24,18 @@ import org.obiba.onyx.jade.instrument.ExternalAppLauncherHelper;
 import org.obiba.onyx.jade.instrument.InstrumentRunner;
 import org.obiba.onyx.jade.instrument.service.InstrumentExecutionService;
 import org.obiba.onyx.util.FileUtil;
-import org.obiba.onyx.util.UnicodeReader;
 import org.obiba.onyx.util.data.Data;
 import org.obiba.onyx.util.data.DataBuilder;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.support.ResourceBundleMessageSource;
+
+import org.springframework.beans.factory.InitializingBean;
 
 /**
  * Launches, configures and collects data from Canadian Digit Triplet Test native application.
  */
-public class CdttInstrumentRunner implements InstrumentRunner {
+public class CdttInstrumentRunner implements InstrumentRunner, InitializingBean {
 
   private static final Logger log = LoggerFactory.getLogger(JnlpClient.class);
 
@@ -68,50 +53,59 @@ public class CdttInstrumentRunner implements InstrumentRunner {
 
   private static String RESOURCE_BUNDLE_BASE_NAME = "srt-instrument";
 
-  private ResourceBundleMessageSource resourceBundleMessageSource = new ResourceBundleMessageSource();
+  private ResourceBundle cdttResourceBundle;
 
-  private String gender;
+  public void afterPropertiesSet() throws Exception {
+    setCdttResourceBundle(ResourceBundle.getBundle(RESOURCE_BUNDLE_BASE_NAME, getLocale()));
+  }
 
-  private String barcode;
-
-  private String language;
-
-  private Integer testear;
-
+  /**
+   * Initialize the instrument runner
+   */
   public void initialize() {
     log.info( "Initializing CDTT" );
     createBackupSettingsFile();
     initializeSettingsFile();
+    externalAppHelper.setParameterStr(instrumentExecutionService.getParticipantID());
   }
 
+  /**
+   * Initialize the Settings.xlsx file with participant data as defined
+   * in instrument-context.xml
+   */
   public void initializeSettingsFile() {
-    this.gender = instrumentExecutionService.getInputParameterValue(
+    String gender = instrumentExecutionService.getInputParameterValue(
       "INPUT_PARTICIPANT_GENDER").getValue().equals("M") ? "Male" : "Female";
-    this.barcode = instrumentExecutionService.getInputParameterValue(
-      "INPUT_PARTICIPANT_BARCODE").getValue();
-    this.language = instrumentExecutionService.getInputParameterValue(
+    String language = instrumentExecutionService.getInputParameterValue(
       "INPUT_PARTICIPANT_LANGUAGE").getValue().equals("ENGLISH") ? "EN_CA" : "FR_CA";
-    this.testear = instrumentExecutionService.getInputParameterValue(
-      "INPUT_CDTT_TEST_EAR").getValue();
+    String testear = instrumentExecutionService.getInputParameterValue(
+      "INPUT_CDTT_TEST_EAR").getValue().toString();
 
     HashMap<String, CellHelper> map = new HashMap<String, CellHelper>();
     map.put( "Default test language",
-      new CellHelper( 1, this.language, Action.WRITE ) );
+      new CellHelper( 1, language, Action.WRITE ) );
     map.put( "Default talker",
-      new CellHelper( 1, this.gender, Action.WRITE ));
+      new CellHelper( 1, gender, Action.WRITE ));
     map.put( "Default test ear: Left (0), right (1), or binaural (2)",
-      new CellHelper( 1, this.testear.toString(), Action.WRITE ) );
+      new CellHelper( 1, testear, Action.WRITE ) );
 
-    String fileName = getSettingsFile();
-    WorkbookSheet settings = new WorkbookSheet( fileName, "DefaultParameters" );
-
+    WorkbookSheet settings = null;
+    RuntimeException rte = null;
     try {
+      String fileName = getSettingsFile();
+      settings = new WorkbookSheet( fileName, "DefaultParameters" );
       settings.write( map );
-    } catch ( IOException ex ) {
-      throw ex;
+    } catch( IOException e ) {
+      rte = new RuntimeException(e);
+    } catch( ParseException e) {
+      rte = new RuntimeException(e);
     }
+    if( null != rte ) throw rte;
   }
 
+  /**
+   * Run the CDTT application
+   */
   public void run() {
     log.info( "Launching CDTT application" );
     externalAppHelper.launch();
@@ -123,12 +117,16 @@ public class CdttInstrumentRunner implements InstrumentRunner {
     sendDataToServer(data);
   }
 
+  /**
+   * Send the data to the server
+   * @param data a map of variable labels and Data values
+   */
   public void sendDataToServer( Map<String, Data> data ) {
     instrumentExecutionService.addOutputParameterValues(data);
   }
 
   /**
-   * Implements parent method shutdown from InstrumentRunner Delete results from current measurement
+   * Implements parent method shutdown from InstrumentRunner. Delete results from current measurement
    */
   @Override
   public void shutdown() {
@@ -137,18 +135,18 @@ public class CdttInstrumentRunner implements InstrumentRunner {
   }
 
   /**
-   * Gets the data in the result file, compares the  obtained to the configuration file and show a warning
-   * popup when no test data is found or when the identifier does not match the barcode
+   * Gets the data in the result file, compares the identifier obtained in the configuration file and show a warning
+   * popup when no test data is found or when the subject ID does not match the participant barcode
+   * @return the map of variable names and data
    */
-  public Map<String, Data>  retrieveDeviceData() {
+  public Map<String, Data> retrieveDeviceData() {
 
     Map<String, Data> outputData = new HashMap<String, Data>();
 
     String fileName = getResultsFile();
+    WorkbookSheet results = new WorkbookSheet( fileName, "Main" );
 
-    WorkbookSheet settings = new WorkbookSheet( fileName, "Main" );
-
-    if( !settings.canRead() ) {
+    if( !results.canRead() ) {
       warningPopup( "noResultFileFound" );
       log.warn( "CDTT has been shutdown but the result file was not found." );
     } else {
@@ -156,83 +154,106 @@ public class CdttInstrumentRunner implements InstrumentRunner {
       String [] ear = { "Left", "Right", "Binaural" };
 
       HashMap<String, CellHelper> map = new HashMap<String, CellHelper>();
-      map.put( "Subject ID:",
-        new CellHelper( 1,this.barcode, Action.VALIDATE) );
-      map.put( "Language",
-        new CellHelper( 1, this.language, Action.VALIDATE) );
-      map.put( "Talker",
-        new CellHelper( 1, this.gender, Action.VALIDATE) );
-      map.put( "Test Ear",
-        new CellHelper( 1, ear[this.testear], Action.VALIDATE) );
-      map.put( "Date & time",
-        new CellHelper( 2, "RES_TEST_DATETIME", Action.READ) );
-      map.put( "Language",
-        new CellHelper( 2, "RES_TEST_LANGUAGE", Action.READ) );
-      map.put( "Talker",
-        new CellHelper( 2, "RES_TEST_TALKER", Action.READ) );
-      map.put( "Test Ear",
-        new CellHelper( 2, "RES_TEST_EAR", Action.READ) );
-      map.put( "SRT",
-        new CellHelper( 2, "RES_SRT", Action.READ) );
-      map.put( "St. Dev.",
-        new CellHelper( 2, "RES_STD_DEV", Action.READ) );
-      map.put( "Reversals",
-        new CellHelper( 2, "RES_REV_NB", Action.READ) );
+      String gender = instrumentExecutionService.getInputParameterValue(
+        "INPUT_PARTICIPANT_GENDER").getValue().equals("M") ? "Male" : "Female";
+      String barcode = instrumentExecutionService.getParticipantID();
+      String language = instrumentExecutionService.getInputParameterValue(
+        "INPUT_PARTICIPANT_LANGUAGE").getValue().equals("ENGLISH") ? "EN_CA" : "FR_CA";
+      int testear = instrumentExecutionService.getInputParameterValue(
+        "INPUT_CDTT_TEST_EAR").getValue();
 
+      log.info("CDTT language: " + language );
+
+      map.put( "Subject ID:",
+        new CellHelper( 1, barcode, Action.VALIDATE) );
+      map.put( "Language",
+        new CellHelper( 2, language, Action.VALIDATE) );
+      map.put( "Talker",
+        new CellHelper( 2, gender, Action.VALIDATE) );
+      map.put( "Test Ear",
+        new CellHelper( 2, ear[testear], Action.VALIDATE) );
+
+      boolean valid = true;
       try {
-        outputData.putAll( settings.read (map ) );
-      } catch ( IOException ex )  {
-        // do nothing
+        results.read( map );
+      } catch( IOException e )  {
+        warningPopup( "problemResultFile" );
+        log.warn( "failed to read the results file " + fileName + ": " + e.getMessage() );
+        valid = false;
+      } catch( ParseException e ) {
+        warningPopup( "invalidTestData" );
+        log.warn( "failed to validate the results file " + fileName + ": " + e.getMessage() );
+        valid = false;
       }
 
-      if( outputData.isEmpty() ) {
-        warningPopup( "noTestData" );
-        log.warn( "No test data was found in the CDTT test result file." );
-      } else {
+      if(valid) {
+	map.clear();
 
-        EventQueue.invokeLater(new Runnable() {
-          public void run() {
-            String msg = resourceBundleMessageSource.getMessage("uploading", null, getLocale());
-            String title = resourceBundleMessageSource.getMessage("uploadingTitle", null, getLocale());
-            JOptionPane.showMessageDialog(null, msg, title, JOptionPane.INFORMATION_MESSAGE);
-          }
-        });
+	map.put( "Date & time",
+	  new CellHelper( 2, "RES_TEST_DATETIME", Action.READ) );
+	map.put( "Language",
+	  new CellHelper( 2, "RES_TEST_LANGUAGE", Action.READ) );
+	map.put( "Talker",
+	  new CellHelper( 2, "RES_TEST_TALKER", Action.READ) );
+	map.put( "Test Ear",
+	  new CellHelper( 2, "RES_TEST_EAR", Action.READ) );
+	map.put( "SRT",
+	  new CellHelper( 2, "RES_SRT", Action.READ) );
+	map.put( "St. Dev.",
+	  new CellHelper( 2, "RES_STD_DEV", Action.READ) );
+	map.put( "Reversals",
+	  new CellHelper( 2, "RES_REV_NB", Action.READ) );
 
-        Data binaryData = DataBuilder.buildBinary(new File(fileName));
-        sendDataToServer(binaryData);
+	try {
+	  outputData.putAll(results.read(map));
+	} catch( Exception e )  {
+	  log.warn( "failed to read the results file " + fileName + ": " + e.getMessage() );
+	}
+
+	if( outputData.isEmpty() ) {
+	  warningPopup( "noTestData" );
+	  log.warn( "No test data was found in the CDTT test result file." );
+	} else {
+
+	  EventQueue.invokeLater(new Runnable() {
+	    public void run() {
+              try {
+                String message = cdttResourceBundle.getString( "uploading" );
+	        String title = cdttResourceBundle.getString( "uploadingTitle" );
+	        JOptionPane.showMessageDialog( null, message, title, JOptionPane.INFORMATION_MESSAGE );
+              } catch (Exception e) {
+                log.warn("The data upload message dialog failed to launch");
+              }
+	    }
+	  });
+
+	  outputData.put("RESULT_FILE", DataBuilder.buildBinary(new File( fileName )));
+	}
       }
     }
 
     return outputData;
   }
 
-  public void sendDataToServer(Data binaryData) {
-    Map<String, Data> ouputToSend = new HashMap<String, Data>();
+  /**
+   * Present an informative message dialog
+   * @param key a resource string key
+   * @return the warning message
+   */
+  String warningPopup(String key) {
+    String message = cdttResourceBundle.getString( key );
+    String title = cdttResourceBundle.getString( "warningTitle" );
 
-    // Save the Result File
-    try {
-      ouputToSend.put( "RESULT_FILE", binaryData );
-    } catch( Exception ex ) {
-      log.warn( "Failed to send the CDTT result file" + ex );
-    }
-    instrumentExecutionService.addOutputParameterValues(ouputToSend);
-  }
-
-  String warningPopup(String key, String[] args) {
-    String message = resourceBundleMessageSource.getMessage(key, args, getLocale());
-    String title = resourceBundleMessageSource.getMessage("warningTitle", null, getLocale());
-
-    JOptionPane.showMessageDialog(null, message, title, JOptionPane.WARNING_MESSAGE);
+    JOptionPane.showMessageDialog( null, message, title, JOptionPane.WARNING_MESSAGE );
     return message;
   }
 
-  String warningPopup(String key) {
-    return warningPopup(key, null);
-  }
-
+  /**
+   * Delete residual results files
+   */
   private void deleteDeviceData() {
     // Delete result files if any exist.
-    File resultDir = new File(getResultPath());
+    File resultDir = new File( getResultPath() );
     try {
       for(File file : resultDir.listFiles(new FilenameFilter() {
         @Override
@@ -240,114 +261,127 @@ public class CdttInstrumentRunner implements InstrumentRunner {
           return !name.endsWith("Template.xlsx");
         }
       })) {
-        if( !FileUtil.delete(file) ) log.warn("Could not delete CDTT result file [" + file.getAbsolutePath() + "].");
+        if( !FileUtil.delete(file) )
+          log.warn("Could not delete CDTT result file [" + file.getAbsolutePath() + "].");
       }
-    } catch( IOException ex ) {
-      log.error( "Could not delete CDTT result file: " + ex );
+    } catch( IOException e ) {
+      log.error( "Could not delete CDTT result file: " + e.getMessage() );
     }
   }
 
+  /**
+   * Get the external application launcher helper
+   * @return the external application launcher helpe
+   */
   public ExternalAppLauncherHelper getExternalAppHelper() {
     return externalAppHelper;
   }
 
+  /**
+   * Set the external application launcher helper
+   * @param externalAppHelper the external application launcher helpe
+   */
   public void setExternalAppHelper(ExternalAppLauncherHelper externalAppHelper) {
     this.externalAppHelper = externalAppHelper;
   }
 
+  /**
+   * Set the instrument execution service
+   * @param instrumentExecutionService the instrument execution service
+   */
   public void setInstrumentExecutionService(InstrumentExecutionService instrumentExecutionService) {
     this.instrumentExecutionService = instrumentExecutionService;
   }
 
+  /**
+   * Set the software installation path
+   * @param softwareInstallPath the software installation path
+   */
   public void setSoftwareInstallPath(String softwareInstallPath) {
     this.softwareInstallPath = softwareInstallPath;
   }
 
+  /**
+   * Get the software installation path
+   * @return the software installation path
+   */
   public String getSoftwareInstallPath() {
     return softwareInstallPath;
   }
 
+  /**
+   * Set the path to the results file
+   * @param resultPath the path to the results file
+   */
   public void setResultPath(String resultPath) {
     this.resultPath = resultPath;
   }
 
+  /**
+   * Get the results file path
+   * @return the results file path
+   */
   public String getResultPath() {
     return resultPath;
   }
 
+  /**
+   * Set the path to the settings file
+   * @param settingPath the path to the settings file
+   */
   public void setSettingPath(String settingPath) {
     this.settingPath = settingPath;
   }
 
+  /**
+   * Get the settings file path
+   * @return the settings file path
+   */
   public String getSettingPath() {
     return settingPath;
   }
 
+  /**
+   * Get the settings file name
+   * @return the settings file name
+   */
   public String getSettingsFile() {
     String fileName = getSettingPath() + "/Settings.xlsx";
     return fileName;
   }
 
+  /**
+   * Get the resutls file name
+   * @return the results file name
+   */
   public String getResultsFile() {
-    String fileName = getResultPath() + "/Results-" + this.barcode + ".xlsx";
+    String barcode = instrumentExecutionService.getParticipantID();
+    String fileName = getResultPath() + "/Results-" + barcode + ".xlsx";
     return fileName;
   }
 
+  /**
+   * Get the locale
+   * @return the locale
+   */
   public Locale getLocale() {
     return locale;
   }
 
+  /**
+   * Set the locale
+   * @param locale the locale
+   */
   public void setLocale(Locale locale) {
     this.locale = locale;
   }
 
-  public void setResourceBundleMessageSource(ResourceBundleMessageSource resourceBundleMessageSource) {
-    this.resourceBundleMessageSource = resourceBundleMessageSource;
+  public void setCdttResourceBundle(ResourceBundle cdttResourceBundle) {
+    this.cdttResourceBundle = cdttResourceBundle;
   }
 
   /**
-   * Initialise instrument runner after all properties are set. Prevents life cycle execution if values do not validate.
-   */
-  public void initializeCdttInstrumentRunner() {
-    initializeResourceBundle();
-    validateSoftwareInstallPathExists();
-    validateSettingPathExists();
-    validateResultPathExists();
-  }
-
-  private void initializeResourceBundle() {
-    resourceBundleMessageSource.setBasename(RESOURCE_BUNDLE_BASE_NAME);
-  }
-
-  private void validateSoftwareInstallPathExists() {
-    File path = new File( this.softwareInstallPath );
-    if( !path.exists() ) {
-      String errorMessage = warningPopup("cdttInstallationDirectoryMissing", new String[] { path.getAbsolutePath() });
-      log.error(errorMessage);
-      throw new RuntimeException(errorMessage);
-    }
-  }
-
-  private void validateResultPathExists() {
-    File path = new File( this.resultPath );
-    if( !path.exists() ) {
-      String errorMessage = warningPopup("cdttResultsDirectoryMissing", new String[] { path.getAbsolutePath() });
-      log.error(errorMessage);
-      throw new RuntimeException(errorMessage);
-    }
-  }
-
-  private void validateSettingPathExists() {
-    File path = new File( this.settingPath );
-    if( !path.exists() ) {
-      String errorMessage = warningPopup("cdttSettingsDirectoryMissing", new String[] { path.getAbsolutePath() });
-      log.error(errorMessage);
-      throw new RuntimeException(errorMessage);
-    }
-  }
-
-  /**
-   *  back up existing settings file
+   *  Backup the existing settings file
    */
   private void createBackupSettingsFile() {
     File file = new File( getSettingsFile() );
@@ -357,13 +391,13 @@ public class CdttInstrumentRunner implements InstrumentRunner {
         log.info("backing up existing settings file");
         FileUtil.copyFile( file, backupFile );
       }
-    } catch( Exception ex ) {
-      throw new RuntimeException("Error backing up CDTT " + file.getAbsoluteFile() + " file", ex);
+    } catch( Exception e ) {
+      throw new RuntimeException("Error backing up CDTT " + file.getAbsoluteFile() + " file", e);
     }
   }
 
   /**
-   *  restore backed up settings file
+   *  Restore the settings file from its backup
    */
   private void restoreSettingsFile() {
     File file = new File( getSettingsFile() );
@@ -375,8 +409,8 @@ public class CdttInstrumentRunner implements InstrumentRunner {
         FileUtil.copyFile(backupFile,file);
         backupFile.delete();
       }
-    } catch( Exception ex ) {
-      throw new RuntimeException("Error restoring CDTT " + file.getAbsoluteFile() + " file", ex);
+    } catch( Exception e ) {
+      throw new RuntimeException("Error restoring CDTT " + file.getAbsoluteFile() + " file", e);
     }
   }
 }

@@ -6,13 +6,13 @@
   <description>Canadian Digit Triplet Test</description>
 
   <parent>
-    <groupId>org.obiba.jade.instrument</groupId>
+    <groupId>org.obiba.onyx</groupId>
     <artifactId>onyx-instruments</artifactId>
     <version>1.12-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.obiba.jade.instrument</groupId>
+  <groupId>org.obiba.onyx</groupId>
   <artifactId>interface-cdtt</artifactId>
   <packaging>jar</packaging>
 
@@ -20,6 +20,10 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.obiba.onyx</groupId>
+      <artifactId>onyx-instrument-bootstrap</artifactId>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
@@ -31,6 +35,16 @@
       <artifactId>easymock</artifactId>
       <scope>test</scope>
     </dependency>
+      <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi</artifactId>
+        <version>3.16</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>3.16</version>
+      </dependency>
   </dependencies>
 
   <build>
@@ -55,7 +69,7 @@
         </configuration>
       </plugin>
       <plugin>
-        <groupId>org.codehaus.mojo.webstart</groupId>
+        <groupId>org.codehaus.mojo</groupId>
         <artifactId>webstart-maven-plugin</artifactId>
         <executions>
           <execution>

@@ -30,7 +30,7 @@
     <module>interface-audiogram-tremetrics-ra300</module>
     <module>interface-retinal-topcon-imagenetr4lite</module>
     <module>interface-ultrasound-ge-vivid</module>
-    <module>interface-tonometer-reichert-ora</module>
+    <module>interface-tonometer-reichert-ora</module> 
     <module>jtds-ntlmauth</module>
   </modules>
 
@@ -44,9 +44,6 @@
     <onyx.version>1.12-SNAPSHOT</onyx.version>
     <slf4j.version>1.7.12</slf4j.version>
     <spring.version>4.2.1.RELEASE</spring.version>
-    <poi.version>3.16</poi.version>
-    <poi-ooxml.version>3.16</poi-ooxml.version>
-
     <!-- maven plugins -->
     <bintray-maven-plugin.version>1.2.20180117184439</bintray-maven-plugin.version>
     <maven-buildnumber-plugin.version>1.2</maven-buildnumber-plugin.version>
@@ -104,17 +101,6 @@
         <version>${slf4j.version}</version>
         <scope>runtime</scope>
       </dependency>
-      <dependency>
-        <groupId>org.apache.poi</groupId>
-        <artifactId>poi</artifactId>
-        <version>${poi.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.poi</groupId>
-        <artifactId>poi-ooxml</artifactId>
-        <version>${poi-ooxml.version}</version>
-      </dependency>
-
       <!-- Unit test libraries -->
       <dependency>
         <groupId>junit</groupId>

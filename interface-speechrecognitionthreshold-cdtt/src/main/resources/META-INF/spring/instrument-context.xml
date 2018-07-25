@@ -1,8 +1,7 @@
 <beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.1.xsd">
 
-  <bean name="instrumentRunner" class="org.obiba.onyx.jade.instrument.cdtt.CdttInstrumentRunner"
-      init-method="initializeCdttInstrumentRunner">
+  <bean name="instrumentRunner" class="org.obiba.onyx.jade.instrument.cdtt.CdttInstrumentRunner">
     <property name="instrumentExecutionService" ref="instrumentExecutionService" />
     <property name="externalAppHelper" ref="externalAppHelper" />
     <property name="locale" ref="locale" />
@@ -13,7 +12,7 @@
 
   <bean name="externalAppHelper" class="org.obiba.onyx.jade.instrument.ExternalAppLauncherHelper">
     <property name="workDir" value="${org.obiba.onyx.jade.instrument.cdtt.path}" />
-    <property name="executable" value="${org.obiba.onyx.jade.instrument.cdtt.jar}" />
+    <property name="executable" value="${org.obiba.onyx.jade.instrument.cdtt.executable}" />
   </bean>
 
 </beans>
