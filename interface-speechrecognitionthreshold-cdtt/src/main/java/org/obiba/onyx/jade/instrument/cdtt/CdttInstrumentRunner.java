@@ -75,9 +75,11 @@ public class CdttInstrumentRunner implements InstrumentRunner, InitializingBean 
    */
   public void initializeSettingsFile() {
     String gender = instrumentExecutionService.getInputParameterValue(
-      "INPUT_PARTICIPANT_GENDER").getValue().equals("M") ? "Male" : "Female";
+      "INPUT_PARTICIPANT_GENDER").getValue();
+    gender = gender.toLowerCase().startsWith("m") ? "Male" : "Female";
     String language = instrumentExecutionService.getInputParameterValue(
-      "INPUT_PARTICIPANT_LANGUAGE").getValue().equals("ENGLISH") ? "EN_CA" : "FR_CA";
+      "INPUT_PARTICIPANT_LANGUAGE").getValue();
+    language = language.toLowerCase().startsWith("e") ? "EN_CA" : "FR_CA";
     String testear = instrumentExecutionService.getInputParameterValue(
       "INPUT_CDTT_TEST_EAR").getValue().toString();
 
@@ -155,10 +157,12 @@ public class CdttInstrumentRunner implements InstrumentRunner, InitializingBean 
 
       HashMap<String, CellHelper> map = new HashMap<String, CellHelper>();
       String gender = instrumentExecutionService.getInputParameterValue(
-        "INPUT_PARTICIPANT_GENDER").getValue().equals("M") ? "Male" : "Female";
+        "INPUT_PARTICIPANT_GENDER").getValue();
+      gender = gender.toLowerCase().startsWith("m") ? "Male" : "Female";
       String barcode = instrumentExecutionService.getParticipantID();
       String language = instrumentExecutionService.getInputParameterValue(
-        "INPUT_PARTICIPANT_LANGUAGE").getValue().equals("ENGLISH") ? "EN_CA" : "FR_CA";
+        "INPUT_PARTICIPANT_LANGUAGE").getValue();
+      language = language.toLowerCase().startsWith("e") ? "EN_CA" : "FR_CA";
       int testear = instrumentExecutionService.getInputParameterValue(
         "INPUT_CDTT_TEST_EAR").getValue();
 
